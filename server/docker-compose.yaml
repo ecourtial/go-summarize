@@ -1,0 +1,73 @@
+services:
+
+    ############################
+    ## MySQL
+    ############################
+    mysql:
+        build:
+            context: docker/mysql
+        container_name: mysql_go-summarize
+        volumes:
+            - mysql_data:/data:/var/lib/mysql
+            - ./data:/db-data
+        command: "--default-authentication-plugin=mysql_native_password"
+        ports:
+            - "${MYSQL_PORT:-3306}:3306"
+        environment:
+            - MYSQL_DATABASE=go-summarize
+            - MYSQL_ROOT_PASSWORD=root
+
+
+    ############################
+    ## NGINX
+    ############################
+    nginx:
+        container_name: nginx_go-summarize
+        build:
+            context: docker/nginx
+        ports:
+            - ${HTTP_PORT:-80}:80
+        volumes:
+            - ./docker/nginx/config/nginx.conf:/etc/nginx/nginx.conf
+            - ./docker/nginx/config/vhost.conf:/etc/nginx/conf.d/vhost.template
+            - ./app/public:/var/www/html/public:ro
+        depends_on:
+            - php
+
+    ############################
+    ## PHP
+    ############################
+    php:
+        user: "${UID}:${GID}"
+        hostname: php_go-summarize
+        container_name: php_go-summarize
+        build:
+            context: docker/php
+        environment:
+            COMPOSER_MEMORY_LIMIT: -1
+            PHP_IDE_CONFIG: "serverName=go-summarizedebug"
+        volumes:
+            - ./app:/var/www/html
+            - ./app/.composer:/.composer
+        extra_hosts:
+            - host.docker.internal:host-gateway
+
+
+    ############################
+    ## Adminer
+    ############################
+    adminer:
+        image: adminer
+        container_name: adminer_go-summarize
+        ports:
+            - ${ADMINER_HTTP_PORT:-8080}:8080
+
+
+############################
+## Common settings
+############################
+volumes:
+    mysql_data:
+        driver: local
+    rmq_data:
+        driver: local

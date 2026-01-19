@@ -1,0 +1,15 @@
+api_platform:
+    title: Hello GoSummarize!
+    version: 1.0.0
+    defaults:
+        stateless: true
+        cache_headers:
+            vary: ['Content-Type', 'Authorization', 'Origin']
+        pagination_items_per_page: 5 # Default value is 30 according to the doc.
+    patch_formats:
+        json: [ 'application/merge-patch+json' ]
+    swagger:
+        api_keys:
+            access_token:
+                name: Authorization
+                type: header
