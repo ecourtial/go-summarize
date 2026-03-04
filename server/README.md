@@ -1,5 +1,7 @@
 # GoSummarize: the back-end app
 
+[![Symfony](https://github.com/ecourtial/go-summarize/actions/workflows/symfony.yaml/badge.svg)](https://github.com/ecourtial/go-summarize/actions/workflows/symfony.yaml)
+
 - Developed with _ApiPlatform 4_.
 - PHP 8.5.
 - PHPUnit.

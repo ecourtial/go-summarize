@@ -1,0 +1,114 @@
+name: Symfony
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+env:
+  MYSQL_ROOT_PASSWORD: root
+  MYSQL_DATABASE: go-summarize
+
+jobs:
+  symfony-tests:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server/app
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: "false"
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: go-summarize
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: shivammathur/setup-php@2cb9b829437ee246e9b3cac53555a39208ca6d28
+        with:
+          php-version: "8.5"
+
+      - name: Copy .env.test.local
+        run: php -r "file_exists('.env.test.local') || copy('.env.test', '.env.test.local');"
+
+      - name: Cache Composer packages
+        id: composer-cache
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-php-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-php-
+
+      - name: Run composer install
+        run: composer install -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist && composer audit
+
+      - name: Create storage directory
+        run: mkdir -p var/storage/default
+
+      # Build the DSN once (now we know the mapped MySQL port)
+      - name: Build DATABASE_DSN
+        run: |
+          echo "DATABASE_DSN=mysql://root:${MYSQL_ROOT_PASSWORD}@127.0.0.1:${{ job.services.mysql.ports[3306] }}/${MYSQL_DATABASE}?serverVersion=8.0&charset=utf8mb4" >> $GITHUB_ENV
+
+      # Optional but very helpful to avoid race conditions
+      - name: Wait for MySQL
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mysql-client
+          for i in {1..60}; do
+            mysqladmin ping \
+              -h 127.0.0.1 \
+              -P ${{ job.services.mysql.ports[3306] }} \
+              -u root \
+              -p"${MYSQL_ROOT_PASSWORD}" \
+              --silent && exit 0
+            sleep 1
+          done
+          echo "MySQL did not become ready in time" >&2
+          exit 1
+
+      - name: Run PHPCS
+        run: vendor/bin/php-cs-fixer fix --dry-run
+
+      - name: Run PHPStan
+        env:
+          DATABASE_URL: ${{ env.DATABASE_DSN }}
+        run: |
+          APP_ENV=test bin/console cache:warmup
+          vendor/bin/phpstan clear-result-cache
+          vendor/bin/phpstan analyse --memory-limit=-1
+
+      - name: Create database
+        env:
+          DATABASE_URL: ${{ env.DATABASE_DSN }}
+        run: make internal_reset_db_command ENV=test
+
+      - name: Execute migrations
+        env:
+          DATABASE_URL: ${{ env.DATABASE_DSN }}
+        run: make internal_migrate_db_command ENV=test
+
+      - name: Load fixtures
+        env:
+          DATABASE_URL: ${{ env.DATABASE_DSN }}
+        run: make internal_load_fixtures_command ENV=test
+
+      - name: Execute tests (Unit and functional tests) via PHPUnit
+        env:
+          DATABASE_URL: ${{ env.DATABASE_DSN }}
+        run: vendor/bin/phpunit
