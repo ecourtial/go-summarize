@@ -75,7 +75,7 @@ class Page
     #[ApiProperty(readable: true, writable: true)]
     public string $url;
 
-    #[ORM\Column(type: Types::STRING, unique: true, nullable: false)]
+    #[ORM\Column(type: Types::STRING, unique: false, nullable: false)]
     #[ApiProperty(readable: true, writable: true)]
     public string $title;
 
